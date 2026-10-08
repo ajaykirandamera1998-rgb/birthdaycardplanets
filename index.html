@@ -178,7 +178,7 @@
 
       // Without this, a missing/misnamed file just hangs until the timeout.
       modelAsset.addEventListener("error", function () {
-        showError("Could not load the 3D model (BDV.glb). Check the file is uploaded next to index.html and the name matches exactly, including capital letters.");
+        showError("Could not load the 3D model");
       });
 
       // --- Camera / AR engine ---
@@ -192,7 +192,7 @@
       // Safety net: some failures (e.g. a missing targets.mind) don't raise arError.
       setTimeout(function () {
         if (!hasFailed && !isReady) {
-          setStatus("Still working… slow connection? If this keeps happening, check that targets.mind and BDV.glb are uploaded, then reload.");
+          setStatus("Still working… slow connection? If this keeps happening, then reload.");
           actionsEl.hidden = false;
         }
       }, 30000);
