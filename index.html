@@ -1,31 +1,202 @@
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  </head>
-  <body>
-    <a-scene 
-      mindar-image="imageTargetSrc: targets.mind;" 
-      color-space="sRGB" 
-      renderer="colorManagement: true, physicallyCorrectLights: true" 
-      vr-mode-ui="enabled: false" 
-      device-orientation-permission-ui="enabled: false">
-      
-      <a-assets>
-        <a-asset-item id="birthdayModel" src="BDV.glb"></a-asset-item>
-      </a-assets>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>AR Experience</title>
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  <style>
+    html, body { margin: 0; padding: 0; }
 
-      <a-entity mindar-image-target="targetIndex: 0">
-        <a-gltf-model 
-          src="#birthdayModel" 
-          position="0 0 0" 
-          rotation="0 0 0" 
-          scale="0.7 0.7 0.7">
-        </a-gltf-model>
-      </a-entity>
-    </a-scene>
-  </body>
+    /* ---------- Custom loader (replaces A-Frame's default blue screen) ---------- */
+    #loader {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      background: #14110f;
+      color: #f4efe6;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      transition: opacity 0.4s ease;
+    }
+    #loader.hidden { opacity: 0; pointer-events: none; }
+
+    #loader .spinner {
+      width: 46px;
+      height: 46px;
+      border: 5px solid rgba(255, 255, 255, 0.15);
+      border-top-color: #ffb13b;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    #loader.error .spinner { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #loader h1 {
+      margin: 22px 0 6px;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+    #loader-status {
+      margin: 0;
+      max-width: 300px;
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0.8;
+    }
+    #loader.error #loader-status { color: #ff9b8a; opacity: 1; }
+
+    #loader-bar {
+      width: 220px;
+      height: 6px;
+      margin-top: 18px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.15);
+      overflow: hidden;
+    }
+    #loader.error #loader-bar { display: none; }
+    #loader-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: #ffb13b;
+      transition: width 0.25s ease;
+    }
+
+    #loader-actions { margin-top: 20px; }
+    #loader-actions[hidden] { display: none; }
+    #reload-btn {
+      padding: 10px 26px;
+      border: 0;
+      border-radius: 999px;
+      background: #ffb13b;
+      color: #14110f;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Overlay sits ABOVE the scripts so it can paint while they download. -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <h1>Loading AR…</h1>
+    <p id="loader-status">Preparing your experience…</p>
+    <div id="loader-bar"><div id="loader-bar-fill"></div></div>
+    <div id="loader-actions" hidden>
+      <button id="reload-btn" type="button">Reload</button>
+    </div>
+  </div>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <a-scene
+    loading-screen="enabled: false"
+    mindar-image="imageTargetSrc: targets.mind; uiLoading: no; uiError: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets timeout="30000">
+      <a-asset-item id="birthdayModel" src="BDV.glb"></a-asset-item>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-gltf-model
+        src="#birthdayModel"
+        position="0 0 0"
+        rotation="0 0 0"
+        scale="0.7 0.7 0.7">
+      </a-gltf-model>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    (function () {
+      var loader = document.getElementById("loader");
+      var statusEl = document.getElementById("loader-status");
+      var barFill = document.getElementById("loader-bar-fill");
+      var actionsEl = document.getElementById("loader-actions");
+      var sceneEl = document.querySelector("a-scene");
+      var modelAsset = document.getElementById("birthdayModel");
+
+      var hasFailed = false;
+      var isReady = false;
+
+      document.getElementById("reload-btn").addEventListener("click", function () {
+        window.location.reload();
+      });
+
+      function setStatus(text) { statusEl.textContent = text; }
+
+      function showError(text) {
+        hasFailed = true;
+        loader.classList.add("error");
+        loader.classList.remove("hidden");
+        loader.style.display = "flex";
+        setStatus(text);
+        actionsEl.hidden = false;
+      }
+
+      function hideLoader() {
+        if (hasFailed) return; // never hide a real error message
+        isReady = true;
+        loader.classList.add("hidden");
+        setTimeout(function () { loader.style.display = "none"; }, 450);
+      }
+
+      // --- 3D model download progress ---
+      modelAsset.addEventListener("progress", function (e) {
+        var d = e.detail || {};
+        if (d.totalBytes > 0) {
+          var pct = Math.min(100, Math.round((d.loadedBytes / d.totalBytes) * 100));
+          barFill.style.width = pct + "%";
+          setStatus("Loading 3D model… " + pct + "%");
+        } else {
+          // Server didn't report a size (e.g. compressed transfer) - can't show %.
+          setStatus("Loading 3D model…");
+        }
+      });
+
+      function onModelLoaded() {
+        barFill.style.width = "100%";
+        setStatus("Starting camera… tap Allow when asked.");
+      }
+      if (modelAsset.hasLoaded) onModelLoaded();
+      else modelAsset.addEventListener("loaded", onModelLoaded);
+
+      // Without this, a missing/misnamed file just hangs until the timeout.
+      modelAsset.addEventListener("error", function () {
+        showError("Could not load the 3D model (BDV.glb). Check the file is uploaded next to index.html and the name matches exactly, including capital letters.");
+      });
+
+      // --- Camera / AR engine ---
+      sceneEl.addEventListener("arReady", hideLoader);
+
+      sceneEl.addEventListener("arError", function (e) {
+        console.error("MindAR error:", e && e.detail);
+        showError("Camera couldn't start. Allow camera access, make sure the page is on HTTPS (or localhost), then reload.");
+      });
+
+      // Safety net: some failures (e.g. a missing targets.mind) don't raise arError.
+      setTimeout(function () {
+        if (!hasFailed && !isReady) {
+          setStatus("Still working… slow connection? If this keeps happening, check that targets.mind and BDV.glb are uploaded, then reload.");
+          actionsEl.hidden = false;
+        }
+      }, 30000);
+    })();
+  </script>
+</body>
 </html>
