@@ -1,202 +1,246 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>AR Experience</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Wedding AR Slideshow</title>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Cormorant+Garamond:wght@500;600&display=swap" rel="stylesheet" />
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+  .a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
 
-  <style>
-    html, body { margin: 0; padding: 0; }
+  #loader{position:fixed;inset:0;z-index:100;background:#1a0f12;color:#f3dfb0;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;font-family:"Cormorant Garamond",serif;transition:opacity .5s}
+  #loader .ring{width:44px;height:44px;border:3px solid rgba(243,223,176,.25);border-top-color:#f3dfb0;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px}
+  @keyframes spin{to{transform:rotate(360deg)}}
 
-    /* ---------- Custom loader (replaces A-Frame's default blue screen) ---------- */
-    #loader {
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      z-index: 99999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      text-align: center;
-      background: #14110f;
-      color: #f4efe6;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      transition: opacity 0.4s ease;
-    }
-    #loader.hidden { opacity: 0; pointer-events: none; }
-
-    #loader .spinner {
-      width: 46px;
-      height: 46px;
-      border: 5px solid rgba(255, 255, 255, 0.15);
-      border-top-color: #ffb13b;
-      border-radius: 50%;
-      animation: spin 0.9s linear infinite;
-    }
-    #loader.error .spinner { display: none; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    #loader h1 {
-      margin: 22px 0 6px;
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-    }
-    #loader-status {
-      margin: 0;
-      max-width: 300px;
-      font-size: 14px;
-      line-height: 1.5;
-      opacity: 0.8;
-    }
-    #loader.error #loader-status { color: #ff9b8a; opacity: 1; }
-
-    #loader-bar {
-      width: 220px;
-      height: 6px;
-      margin-top: 18px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.15);
-      overflow: hidden;
-    }
-    #loader.error #loader-bar { display: none; }
-    #loader-bar-fill {
-      width: 0%;
-      height: 100%;
-      background: #ffb13b;
-      transition: width 0.25s ease;
-    }
-
-    #loader-actions { margin-top: 20px; }
-    #loader-actions[hidden] { display: none; }
-    #reload-btn {
-      padding: 10px 26px;
-      border: 0;
-      border-radius: 999px;
-      background: #ffb13b;
-      color: #14110f;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-  </style>
+  #names{position:fixed;top:22px;left:0;right:0;z-index:50;text-align:center;pointer-events:none;
+    font-family:"Great Vibes",cursive;font-size:clamp(34px,11vw,56px);color:#fff3cf;margin:0;
+    text-shadow:0 2px 10px rgba(0,0,0,.6),0 0 24px rgba(212,175,55,.6);opacity:0}
+  #names i{color:#ff9fb4;font-style:normal;margin:0 6px}
+  #date{position:fixed;top:92px;left:0;right:0;z-index:50;text-align:center;pointer-events:none;
+    font-family:"Cormorant Garamond",serif;font-size:16px;letter-spacing:4px;color:#fff3cf;
+    text-shadow:0 1px 6px rgba(0,0,0,.7);opacity:0}
+  #hint{position:fixed;bottom:34px;left:50%;transform:translateX(-50%);z-index:50;pointer-events:none;
+    padding:8px 18px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;
+    font-family:"Cormorant Garamond",serif;font-size:16px;white-space:nowrap;transition:opacity .4s}
+  #petals{position:fixed;inset:0;z-index:40;pointer-events:none;overflow:hidden}
+  .petal{position:absolute;top:-30px;font-size:18px;opacity:.9}
+</style>
 </head>
-
 <body>
-  <!-- Overlay sits ABOVE the scripts so it can paint while they download. -->
-  <div id="loader">
-    <div class="spinner"></div>
-    <h1>Loading AR…</h1>
-    <p id="loader-status">Preparing your experience…</p>
-    <div id="loader-bar"><div id="loader-bar-fill"></div></div>
-    <div id="loader-actions" hidden>
-      <button id="reload-btn" type="button">Reload</button>
-    </div>
-  </div>
 
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<div id="loader"><div class="ring"></div><div>Preparing your wedding memories…</div></div>
+<h1 id="names"><span id="n1"></span><i>&amp;</i><span id="n2"></span></h1>
+<div id="date"></div>
+<div id="hint">Point your camera at the wedding card</div>
+<div id="petals"></div>
 
-  <a-scene
-    loading-screen="enabled: false"
-    mindar-image="imageTargetSrc: targets.mind; uiLoading: no; uiError: no;"
-    color-space="sRGB"
-    renderer="colorManagement: true, physicallyCorrectLights: true"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false">
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind; uiLoading: no; uiScanning: no; uiError: no;"
+  loading-screen="enabled: false"
+  color-space="sRGB"
+  renderer="colorManagement: true; alpha: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  embedded>
 
-    <a-assets timeout="30000">
-      <a-asset-item id="birthdayModel" src="BD.glb"></a-asset-item>
-    </a-assets>
+  <a-assets timeout="30000">
+    <img id="img1" src="image1.jpg" />
+    <img id="img2" src="image2.jpg" />
+    <img id="img3" src="image3.jpg" />
+    <img id="img4" src="image4.jpg" />
+    <img id="img5" src="image5.jpg" />
+  </a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-entity mindar-image-target="targetIndex: 0">
-      <a-gltf-model
-        src="#birthdayModel"
-        position="-0.6 0 -0.5"
-        rotation="0 0 0"
-        scale="0.2 0.2 0.2">
-      </a-gltf-model>
+  <a-entity id="target" mindar-image-target="targetIndex: 0">
+    <a-entity id="album">
+      <!-- gold frame, resized per photo by script -->
+      <a-plane id="frame" width="1" height="1" position="0 0 0" material="shader: flat; color: #d4af37"></a-plane>
+      <!-- slides are injected here -->
     </a-entity>
-  </a-scene>
+  </a-entity>
+</a-scene>
 
-  <script>
-    (function () {
-      var loader = document.getElementById("loader");
-      var statusEl = document.getElementById("loader-status");
-      var barFill = document.getElementById("loader-bar-fill");
-      var actionsEl = document.getElementById("loader-actions");
-      var sceneEl = document.querySelector("a-scene");
-      var modelAsset = document.getElementById("birthdayModel");
+<script>
+/* ============ EDIT THESE ============ */
+const GROOM = "Mr";            // e.g. "Rahul"
+const BRIDE = "Mrs";           // e.g. "Priya"
+const WEDDING_DATE = "";       // e.g. "14 . 02 . 2027"  (leave "" to hide)
+const SLIDE_COUNT = 5;         // image1.jpg … image5.jpg
+const HOLD = 3.2;              // seconds each photo stays
+const BOX_W = 1.0, BOX_H = 1.3;// max photo size on the card (AR units)
+const BORDER = 0.06;           // gold frame thickness
+/* ==================================== */
 
-      var hasFailed = false;
-      var isReady = false;
+const scene = document.querySelector("a-scene");
+const targetEl = document.querySelector("#target");
+const album = document.querySelector("#album");
+const frame = document.querySelector("#frame");
+const loader = document.querySelector("#loader");
+const hint = document.querySelector("#hint");
+const namesEl = document.querySelector("#names");
+const dateEl = document.querySelector("#date");
 
-      document.getElementById("reload-btn").addEventListener("click", function () {
-        window.location.reload();
-      });
+document.querySelector("#n1").textContent = GROOM;
+document.querySelector("#n2").textContent = BRIDE;
+dateEl.textContent = WEDDING_DATE;
 
-      function setStatus(text) { statusEl.textContent = text; }
+const slides = [];
+let cur = -1, timer = null, active = false;
 
-      function showError(text) {
-        hasFailed = true;
-        loader.classList.add("error");
-        loader.classList.remove("hidden");
-        loader.style.display = "flex";
-        setStatus(text);
-        actionsEl.hidden = false;
-      }
+const setOp = (el, v) => { const m = el.getObject3D("mesh"); if (m) m.material.opacity = v; };
+function fade(el, from, to, d, delay = 0, ease = "power1.inOut") {
+  const o = { v: from };
+  return gsap.to(o, { v: to, duration: d, delay, ease, onUpdate: () => setOp(el, o.v) });
+}
+function reset(s) {
+  const o = s.el.object3D;
+  gsap.killTweensOf([o.position, o.rotation, o.scale]);
+  o.position.set(0, 0, 0.01); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1);
+}
 
-      function hideLoader() {
-        if (hasFailed) return; // never hide a real error message
-        isReady = true;
-        loader.classList.add("hidden");
-        setTimeout(function () { loader.style.display = "none"; }, 450);
-      }
+/* ---------- 5 transition styles (cycled) ---------- */
+const TRANSITIONS = [
+  // 0 fade + zoom
+  (tl, i, o) => {
+    i.object3D.scale.set(1.18, 1.18, 1);
+    tl.add(fade(i, 0, 1, 0.9), 0);
+    tl.to(i.object3D.scale, { x: 1, y: 1, duration: 1.1, ease: "power2.out" }, 0);
+    if (o) tl.add(fade(o, 1, 0, 0.9), 0);
+  },
+  // 1 slide from right
+  (tl, i, o) => {
+    i.object3D.position.x = 1.5; setOp(i, 1);
+    tl.to(i.object3D.position, { x: 0, duration: 0.9, ease: "back.out(1.2)" }, 0);
+    if (o) tl.to(o.object3D.position, { x: -1.5, duration: 0.7, ease: "power2.in" }, 0)
+             .add(fade(o, 1, 0, 0.6), 0.1);
+  },
+  // 2 3D flip
+  (tl, i, o) => {
+    i.object3D.rotation.y = -Math.PI / 2; setOp(i, 1);
+    if (o) tl.to(o.object3D.rotation, { y: Math.PI / 2, duration: 0.45, ease: "power2.in" }, 0);
+    tl.to(i.object3D.rotation, { y: 0, duration: 0.7, ease: "back.out(1.3)" }, o ? 0.4 : 0);
+  },
+  // 3 elastic pop
+  (tl, i, o) => {
+    i.object3D.scale.set(0.01, 0.01, 1);
+    tl.add(fade(i, 0, 1, 0.3), 0);
+    tl.to(i.object3D.scale, { x: 1, y: 1, duration: 1.0, ease: "elastic.out(1,0.6)" }, 0);
+    if (o) { tl.add(fade(o, 1, 0, 0.4), 0); tl.to(o.object3D.scale, { x: 1.25, y: 1.25, duration: 0.4 }, 0); }
+  },
+  // 4 rise from below
+  (tl, i, o) => {
+    i.object3D.position.y = -1.4; setOp(i, 1);
+    tl.to(i.object3D.position, { y: 0, duration: 0.9, ease: "power3.out" }, 0);
+    if (o) tl.to(o.object3D.position, { y: 1.4, duration: 0.7, ease: "power2.in" }, 0)
+             .add(fade(o, 1, 0, 0.6), 0.1);
+  }
+];
 
-      // --- 3D model download progress ---
-      modelAsset.addEventListener("progress", function (e) {
-        var d = e.detail || {};
-        if (d.totalBytes > 0) {
-          var pct = Math.min(100, Math.round((d.loadedBytes / d.totalBytes) * 100));
-          barFill.style.width = pct + "%";
-          setStatus("Loading 3D model… " + pct + "%");
-        } else {
-          // Server didn't report a size (e.g. compressed transfer) - can't show %.
-          setStatus("Loading 3D model…");
-        }
-      });
+function goTo(n) {
+  const out = cur >= 0 ? slides[cur] : null;
+  const inn = slides[n];
+  reset(inn);
+  inn.el.object3D.visible = true;
+  setOp(inn.el, 0);
 
-      function onModelLoaded() {
-        barFill.style.width = "100%";
-        setStatus("Starting camera… tap Allow when asked.");
-      }
-      if (modelAsset.hasLoaded) onModelLoaded();
-      else modelAsset.addEventListener("loaded", onModelLoaded);
+  // frame morphs to the new photo size
+  gsap.to(frame.object3D.scale, {
+    x: inn.w + BORDER * 2, y: inn.h + BORDER * 2, duration: 0.8, ease: "power2.inOut"
+  });
 
-      // Without this, a missing/misnamed file just hangs until the timeout.
-      modelAsset.addEventListener("error", function () {
-        showError("Could not load the 3D model");
-      });
+  const tl = gsap.timeline({
+    onComplete: () => { if (out && out !== inn) out.el.object3D.visible = false; }
+  });
+  TRANSITIONS[n % TRANSITIONS.length](tl, inn.el, out && out.el);
 
-      // --- Camera / AR engine ---
-      sceneEl.addEventListener("arReady", hideLoader);
+  // slow Ken-Burns drift while the photo is held
+  tl.to(inn.el.object3D.scale, { x: 1.06, y: 1.06, duration: HOLD + 1, ease: "none" }, 1.1);
+  cur = n;
+}
 
-      sceneEl.addEventListener("arError", function (e) {
-        console.error("MindAR error:", e && e.detail);
-        showError("Camera couldn't start. Allow camera access, make sure the page is on HTTPS (or localhost), then reload.");
-      });
+function nextSlide() { goTo((cur + 1) % slides.length); }
 
-      // Safety net: some failures (e.g. a missing targets.mind) don't raise arError.
-      setTimeout(function () {
-        if (!hasFailed && !isReady) {
-          setStatus("Still working… slow connection? If this keeps happening, then reload.");
-          actionsEl.hidden = false;
-        }
-      }, 30000);
-    })();
-  </script>
+function startShow() {
+  if (active) return;
+  active = true;
+  hint.style.opacity = 0;
+
+  gsap.fromTo(album.object3D.scale, { x: 0.001, y: 0.001, z: 0.001 },
+              { x: 1, y: 1, z: 1, duration: 0.8, ease: "elastic.out(1,0.6)" });
+  gsap.to([namesEl, dateEl], { opacity: 1, duration: 0.8, delay: 0.3 });
+  gsap.fromTo(namesEl, { y: -20, scale: 0.8 }, { y: 0, scale: 1, duration: 1, delay: 0.3, ease: "back.out(1.6)" });
+
+  if (cur < 0) goTo(0);
+  timer = gsap.delayedCall(HOLD + 1, function loop() {
+    nextSlide();
+    timer = gsap.delayedCall(HOLD + 1, loop);
+  });
+  startPetals();
+}
+
+function stopShow() {
+  active = false;
+  if (timer) timer.kill();
+  gsap.to(album.object3D.scale, { x: 0.001, y: 0.001, z: 0.001, duration: 0.25 });
+  gsap.to([namesEl, dateEl], { opacity: 0, duration: 0.3 });
+  hint.style.opacity = 1;
+  stopPetals();
+}
+
+/* ---------- falling petals / hearts ---------- */
+let petalTimer = null;
+const petalLayer = document.querySelector("#petals");
+function spawnPetal() {
+  const p = document.createElement("div");
+  p.className = "petal";
+  p.textContent = ["🌸", "♥", "🌹", "✨"][Math.floor(Math.random() * 4)];
+  p.style.left = Math.random() * 100 + "vw";
+  p.style.fontSize = 12 + Math.random() * 16 + "px";
+  petalLayer.appendChild(p);
+  gsap.to(p, {
+    y: window.innerHeight + 60, x: (Math.random() - 0.5) * 120, rotation: Math.random() * 360,
+    duration: 4 + Math.random() * 3, ease: "none", onComplete: () => p.remove()
+  });
+}
+function startPetals() { if (!petalTimer) petalTimer = setInterval(spawnPetal, 450); }
+function stopPetals() { clearInterval(petalTimer); petalTimer = null; }
+
+/* ---------- build slides once assets are loaded ---------- */
+scene.addEventListener("loaded", () => {
+  for (let n = 1; n <= SLIDE_COUNT; n++) {
+    const img = document.querySelector("#img" + n);
+    const nw = img.naturalWidth || 3, nh = img.naturalHeight || 4;
+    const k = Math.min(BOX_W / nw, BOX_H / nh);
+    const w = nw * k, h = nh * k;
+
+    const el = document.createElement("a-plane");
+    el.setAttribute("width", w);
+    el.setAttribute("height", h);
+    el.setAttribute("material", { src: "#img" + n, shader: "flat", transparent: true, opacity: 0, side: "double" });
+    el.setAttribute("position", "0 0 0.01");
+    album.appendChild(el);
+    el.object3D.visible = false;
+    slides.push({ el, w, h });
+  }
+  album.object3D.scale.set(0.001, 0.001, 0.001);
+  frame.object3D.scale.set(BOX_W + BORDER * 2, BOX_H + BORDER * 2, 1);
+});
+
+scene.addEventListener("arReady", () => { loader.style.opacity = 0; setTimeout(() => loader.remove(), 500); });
+scene.addEventListener("arError", () => {
+  loader.innerHTML = "<div>Could not open camera.<br>Allow permission and use HTTPS.</div>";
+});
+
+targetEl.addEventListener("targetFound", startShow);
+targetEl.addEventListener("targetLost", stopShow);
+</script>
 </body>
 </html>
