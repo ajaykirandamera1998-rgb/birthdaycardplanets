@@ -41,42 +41,39 @@
 <div id="petals"></div>
 
 <a-scene
-  mindar-image="imageTargetSrc: ./targets.mind; uiLoading: no; uiScanning: no; uiError: no;"
-  loading-screen="enabled: false"
+  mindar-image="imageTargetSrc: ./targets.mind;"
   color-space="sRGB"
-  renderer="colorManagement: true; alpha: true"
+  renderer="colorManagement: true, alpha: true"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
   embedded>
 
   <a-assets timeout="30000">
-    <img id="img1" src="image1.jpg" />
-    <img id="img2" src="image2.jpg" />
-    <img id="img3" src="image3.jpg" />
-    <img id="img4" src="image4.jpg" />
-    <img id="img5" src="image5.jpg" />
+    <img id="img1" src="image1.jpg" crossorigin="anonymous" />
+    <img id="img2" src="image2.jpg" crossorigin="anonymous" />
+    <img id="img3" src="image3.jpg" crossorigin="anonymous" />
+    <img id="img4" src="image4.jpg" crossorigin="anonymous" />
+    <img id="img5" src="image5.jpg" crossorigin="anonymous" />
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
   <a-entity id="target" mindar-image-target="targetIndex: 0">
     <a-entity id="album">
-      <!-- gold frame, resized per photo by script -->
       <a-plane id="frame" width="1" height="1" position="0 0 0" material="shader: flat; color: #d4af37"></a-plane>
-      <!-- slides are injected here -->
     </a-entity>
   </a-entity>
 </a-scene>
 
 <script>
 /* ============ EDIT THESE ============ */
-const GROOM = "Mr";            // e.g. "Rahul"
-const BRIDE = "Mrs";           // e.g. "Priya"
-const WEDDING_DATE = "";       // e.g. "14 . 02 . 2027"  (leave "" to hide)
-const SLIDE_COUNT = 5;         // image1.jpg … image5.jpg
-const HOLD = 3.2;              // seconds each photo stays
-const BOX_W = 1.0, BOX_H = 1.3;// max photo size on the card (AR units)
-const BORDER = 0.06;           // gold frame thickness
+const GROOM = "Rahul";         
+const BRIDE = "Priya";         
+const WEDDING_DATE = "14 . 02 . 2027"; 
+const SLIDE_COUNT = 5;         
+const HOLD = 3.2;              
+const BOX_W = 1.0, BOX_H = 1.3;
+const BORDER = 0.06;           
 /* ==================================== */
 
 const scene = document.querySelector("a-scene");
@@ -106,36 +103,30 @@ function reset(s) {
   o.position.set(0, 0, 0.01); o.rotation.set(0, 0, 0); o.scale.set(1, 1, 1);
 }
 
-/* ---------- 5 transition styles (cycled) ---------- */
 const TRANSITIONS = [
-  // 0 fade + zoom
   (tl, i, o) => {
     i.object3D.scale.set(1.18, 1.18, 1);
     tl.add(fade(i, 0, 1, 0.9), 0);
     tl.to(i.object3D.scale, { x: 1, y: 1, duration: 1.1, ease: "power2.out" }, 0);
     if (o) tl.add(fade(o, 1, 0, 0.9), 0);
   },
-  // 1 slide from right
   (tl, i, o) => {
     i.object3D.position.x = 1.5; setOp(i, 1);
     tl.to(i.object3D.position, { x: 0, duration: 0.9, ease: "back.out(1.2)" }, 0);
     if (o) tl.to(o.object3D.position, { x: -1.5, duration: 0.7, ease: "power2.in" }, 0)
              .add(fade(o, 1, 0, 0.6), 0.1);
   },
-  // 2 3D flip
   (tl, i, o) => {
     i.object3D.rotation.y = -Math.PI / 2; setOp(i, 1);
     if (o) tl.to(o.object3D.rotation, { y: Math.PI / 2, duration: 0.45, ease: "power2.in" }, 0);
     tl.to(i.object3D.rotation, { y: 0, duration: 0.7, ease: "back.out(1.3)" }, o ? 0.4 : 0);
   },
-  // 3 elastic pop
   (tl, i, o) => {
     i.object3D.scale.set(0.01, 0.01, 1);
     tl.add(fade(i, 0, 1, 0.3), 0);
     tl.to(i.object3D.scale, { x: 1, y: 1, duration: 1.0, ease: "elastic.out(1,0.6)" }, 0);
     if (o) { tl.add(fade(o, 1, 0, 0.4), 0); tl.to(o.object3D.scale, { x: 1.25, y: 1.25, duration: 0.4 }, 0); }
   },
-  // 4 rise from below
   (tl, i, o) => {
     i.object3D.position.y = -1.4; setOp(i, 1);
     tl.to(i.object3D.position, { y: 0, duration: 0.9, ease: "power3.out" }, 0);
@@ -151,7 +142,6 @@ function goTo(n) {
   inn.el.object3D.visible = true;
   setOp(inn.el, 0);
 
-  // frame morphs to the new photo size
   gsap.to(frame.object3D.scale, {
     x: inn.w + BORDER * 2, y: inn.h + BORDER * 2, duration: 0.8, ease: "power2.inOut"
   });
@@ -160,8 +150,6 @@ function goTo(n) {
     onComplete: () => { if (out && out !== inn) out.el.object3D.visible = false; }
   });
   TRANSITIONS[n % TRANSITIONS.length](tl, inn.el, out && out.el);
-
-  // slow Ken-Burns drift while the photo is held
   tl.to(inn.el.object3D.scale, { x: 1.06, y: 1.06, duration: HOLD + 1, ease: "none" }, 1.1);
   cur = n;
 }
@@ -195,7 +183,6 @@ function stopShow() {
   stopPetals();
 }
 
-/* ---------- falling petals / hearts ---------- */
 let petalTimer = null;
 const petalLayer = document.querySelector("#petals");
 function spawnPetal() {
@@ -213,7 +200,7 @@ function spawnPetal() {
 function startPetals() { if (!petalTimer) petalTimer = setInterval(spawnPetal, 450); }
 function stopPetals() { clearInterval(petalTimer); petalTimer = null; }
 
-/* ---------- build slides once assets are loaded ---------- */
+// Build slides and handle AR loading events properly
 scene.addEventListener("loaded", () => {
   for (let n = 1; n <= SLIDE_COUNT; n++) {
     const img = document.querySelector("#img" + n);
@@ -234,9 +221,14 @@ scene.addEventListener("loaded", () => {
   frame.object3D.scale.set(BOX_W + BORDER * 2, BOX_H + BORDER * 2, 1);
 });
 
-scene.addEventListener("arReady", () => { loader.style.opacity = 0; setTimeout(() => loader.remove(), 500); });
-scene.addEventListener("arError", () => {
-  loader.innerHTML = "<div>Could not open camera.<br>Allow permission and use HTTPS.</div>";
+scene.addEventListener("arReady", () => {
+  loader.style.opacity = 0;
+  setTimeout(() => loader.remove(), 500);
+});
+
+scene.addEventListener("arError", (event) => {
+  console.log("AR Error:", event);
+  loader.innerHTML = "<div>Could not open camera.<br>Please allow camera permissions and use HTTPS or Localhost.</div>";
 });
 
 targetEl.addEventListener("targetFound", startShow);
