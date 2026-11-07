@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR Birthday Card</title>
+
+  <!-- Order matters: A-Frame first, then MindAR, then aframe-extras (for animation-mixer) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.2.0/dist/aframe-extras.min.js"></script>
+
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    #status {
+      position: fixed; top: 8px; left: 8px; z-index: 100;
+      background: rgba(0,0,0,.7); color: #fff; font: 13px/1.4 monospace;
+      padding: 8px 10px; border-radius: 6px; max-width: 90vw; white-space: pre-line;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="status">Loading...</div>
+
+  <!--
+    imageTargetSrc is the compiled target file (.mind) made from your card image.
+    For a quick first test it points at MindAR's demo card. To use your own card, compile your
+    image into a .mind file, put it next to this page as targets.mind, and change the line to:
+        imageTargetSrc: ./targets.mind;
+  -->
+  <a-scene
+    mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-assets timeout="30000">
+      <a-asset-item id="birthdayModel" src="BD.glb"></a-asset-item>
+
+      <!-- Each video has its own id -->
+      <video id="vid1" src="video.webm" autoplay loop muted playsinline crossorigin="anonymous" preload="auto"></video>
+      <video id="vid2" src="video-1.webm" autoplay loop muted playsinline crossorigin="anonymous" preload="auto"></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-light type="ambient" color="#FFF" intensity="1"></a-light>
+    <a-light type="directional" position="2 4 2" intensity="1.2"></a-light>
+
+    <!-- Everything inside this entity is attached to the card.
+         On the card, 1 unit = the width of your card image. The card lies in the X/Y plane and
+         "out of the card" is +Z. The cake's up is +Y, so the wrapper tilts it 90 degrees to stand
+         up out of a card lying flat on a table. To turn the cake around, change the middle number,
+         e.g. rotation="90 180 0". -->
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-entity rotation="90 0 0">
+        <!-- fit-model: cake footprint = 0.8 of the card width, base sitting on the card.
+             Use fit-model="height: 0.6" instead to size it by height.
+             video-planes: flame1 -> #vid1, flame2 -> #vid2 (flame2 starts later, see FLAME2_OFFSET_SECONDS) -->
+        <a-entity id="model"
+                  gltf-model="#birthdayModel"
+                  fit-model="width: 0.8"
+                  video-planes="flame1: #vid1; flame2: #vid2"
+                  animation-mixer></a-entity>
+      </a-entity>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const status = document.getElementById('status');
+    const lines = [];
+    // Keeps only the last 8 messages so the box doesn't fill the screen
+    const log = (msg) => {
+      lines.push(msg);
+      if (lines.length > 8) lines.shift();
+      status.textContent = lines.join('\n');
+      console.log(msg);
+    };
+    log('Page loaded. Waiting for assets...');
+
+    // Scales a loaded glTF to a target width or height and places its base on y = 0,
+    // centered on x/z. It measures the model in its own coordinates, so it still works when
+    // the model sits inside a rotated parent (like the card anchor above).
+    AFRAME.registerComponent('fit-model', {
+      schema: { height: { default: 0 }, width: { default: 0 } },
+      init() {
+        this.el.addEventListener('model-loaded', () => {
+          const root = this.el.object3D;
+          const obj = this.el.getObject3D('mesh');
+          root.updateWorldMatrix(true, true);
+
+          const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+          const m = new THREE.Matrix4();
+          const box = new THREE.Box3();
+          obj.traverse((o) => {
+            if (!o.isMesh || !o.geometry) return;
+            if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+            m.multiplyMatrices(inv, o.matrixWorld);
+            box.union(o.geometry.boundingBox.clone().applyMatrix4(m));
+          });
+
+          const size = box.getSize(new THREE.Vector3());
+          const c = box.getCenter(new THREE.Vector3());
+
+          let s = 1;
+          if (this.data.width > 0) s = this.data.width / (Math.max(size.x, size.z) || 1);
+          else if (this.data.height > 0) s = this.data.height / (size.y || 1);
+
+          root.scale.setScalar(s);
+          root.position.set(-c.x * s, -box.min.y * s, -c.z * s);
+          log('Model OK. Size ' + size.x.toFixed(2) + ' x ' + size.y.toFixed(2) + ' x ' + size.z.toFixed(2) +
+              ', scaled x' + s.toFixed(3));
+        });
+        this.el.addEventListener('model-error', () => {
+          log('MODEL FAILED to load BD.glb - is it in the same folder as test.html?');
+        });
+      }
+    });
+
+    // Replaces the material of named meshes in the model with a live, transparent video.
+    // Each property is  meshName: #videoId
+    AFRAME.registerComponent('video-planes', {
+      schema: { default: {}, parse: (v) => v, stringify: (v) => v },
+      init() {
+        this.el.addEventListener('model-loaded', () => {
+          const root = this.el.getObject3D('mesh');
+          const wanted = this.parsePairs();
+          const meshNames = [];
+          const done = {};
+          const textures = {};
+
+          root.traverse((o) => {
+            if (!o.isMesh) return;
+            meshNames.push(o.name || '(unnamed)');
+            Object.keys(wanted).forEach((name) => {
+              if (done[name] || !o.name || !o.name.startsWith(name)) return;
+              const video = document.querySelector(wanted[name]);
+              if (!video) { log(name + ': video ' + wanted[name] + ' not found'); return; }
+
+              // Planes that use the same video share one texture, so they always stay in sync.
+              let tex = textures[wanted[name]];
+              if (!tex) {
+                tex = new THREE.VideoTexture(video);
+                tex.colorSpace = THREE.SRGBColorSpace;
+                // glTF UVs are top-left based, so the texture must NOT be flipped
+                tex.flipY = false;
+                textures[wanted[name]] = tex;
+              }
+
+              o.material = new THREE.MeshBasicMaterial({
+                map: tex,
+                transparent: true,
+                alphaTest: 0.01,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                toneMapped: false
+              });
+              o.renderOrder = 10; // draw after the cake so transparency blends correctly
+              done[name] = true;
+              log(name + ' -> ' + wanted[name] + ' OK');
+            });
+          });
+
+          Object.keys(wanted).forEach((name) => {
+            if (!done[name]) log(name + ' NOT FOUND. Meshes in BD.glb: ' + meshNames.join(', '));
+          });
+        });
+      },
+      parsePairs() {
+        // Reads the raw attribute text "flame1: #vid1; flame2: #vid2"
+        const raw = this.el.getAttribute('video-planes');
+        const out = {};
+        if (typeof raw === 'string') {
+          raw.split(';').forEach((part) => {
+            const [k, v] = part.split(':').map((s) => s.trim());
+            if (k && v) out[k] = v;
+          });
+        } else if (raw && typeof raw === 'object') {
+          Object.assign(out, raw);
+        }
+        return out;
+      }
+    });
+
+    document.querySelector('a-assets').addEventListener('timeout', () => {
+      log('Asset load TIMED OUT - check the file names and the Network tab (F12).');
+    });
+
+    // ---- Time difference between the two flames ----------------------------------
+    // How far AHEAD flame2 runs compared with flame1.
+    // Seconds = frames / fps. Example: 12 frames at 24 fps = 0.5. Set 0 for no difference.
+    const FLAME2_OFFSET_SECONDS = 0.5;
+
+    const v1 = document.getElementById('vid1');
+    const v2 = document.getElementById('vid2');
+
+    function syncAndPlay() {
+      const d = v2.duration;
+      v1.currentTime = 0;
+      v2.currentTime = (isFinite(d) && d > 0) ? FLAME2_OFFSET_SECONDS % d : FLAME2_OFFSET_SECONDS;
+      v1.play().catch(() => {});
+      v2.play().catch(() => {});
+    }
+
+    let started = false;
+    function startWhenReady() {
+      if (started || v1.readyState < 2 || v2.readyState < 2) return;
+      started = true;
+      syncAndPlay();
+      log('flame2 starts ' + FLAME2_OFFSET_SECONDS + 's ahead of flame1');
+    }
+
+    [['vid1', v1], ['vid2', v2]].forEach(([id, v]) => {
+      v.addEventListener('error', () => log(id + ' FAILED to load (' + v.getAttribute('src') + ')'));
+      v.addEventListener('loadeddata', () => { log(id + ' loaded'); startWhenReady(); });
+    });
+    startWhenReady();
+
+    // Browsers sometimes block autoplay; first click/tap restarts both with the offset.
+    document.body.addEventListener('click', syncAndPlay, { once: true });
+
+    // ---- Card tracking events -----------------------------------------------------
+    document.addEventListener('DOMContentLoaded', () => {
+      const target = document.querySelector('[mindar-image-target]');
+      target.addEventListener('targetFound', () => { log('Card found'); syncAndPlay(); });
+      target.addEventListener('targetLost', () => { log('Card lost - keep it in view'); });
+    });
+  </script>
+</body>
+</html>
