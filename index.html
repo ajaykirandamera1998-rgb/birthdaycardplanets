@@ -18,6 +18,7 @@
       overflow: hidden;
     }
 
+    /* Only used when the page is opened with ?debug (see the script below). */
     #status {
       position: fixed;
       top: 8px;
@@ -36,17 +37,13 @@
 </head>
 <body>
 
-  <div id="status">Loading...</div>
-
   <!--
-    imageTargetSrc is the compiled target file (.mind) made from your card image.
+    imageTargetSrc is the compiled target file made from your card image (targets.mind),
+    in the same folder as this page.
 
-    For a quick first test, this points at MindAR's demo card.
-
-    To use your own card:
-      1. Compile your card image into targets.mind using the MindAR image-target compiler.
-      2. Put targets.mind in the same folder as this HTML file.
-      3. Change imageTargetSrc below to: ./targets.mind
+    MindAR's own screens (a loading spinner at the start and a scanning frame while it looks
+    for the card) are left on, so people know what to do. To hide them as well, add
+    "uiLoading: no; uiScanning: no;" inside the mindar-image attribute below.
   -->
   <a-scene
     mindar-image="imageTargetSrc: ./targets.mind;"
@@ -90,31 +87,24 @@
     <!--
       Everything inside this entity is attached to the card.
 
-      On the card:
-        - 1 unit = the width of your card image
-        - The card lies in the X/Y plane
-        - "Out of the card" is +Z
-        - The cake's up direction is +Y, so the wrapper rotates it 90 degrees
-          to stand up from a card lying flat on a table.
+      The card lies in the X/Y plane and "out of the card" is +Z. 1 unit = the card's width.
 
-      To turn the cake around, change the middle rotation value:
-        rotation="90 180 0"
+      card-layout decides how the cake stands on it (see DEFAULT_LAYOUT in the script):
+        - upright: the card stands up (on a screen, a wall, or held in your hand).
+                   The cake's up is the card's up.
+        - flat:    the card lies flat on a table. The cake stands up out of the card.
+
+      fit-model sizes the cake so that its footprint is SIZE times the card's width and
+      centres it on the card.
+
+      video-planes puts the live flame videos on the Blender planes: flame1 -> #vid1, flame2 -> #vid2.
     -->
     <a-entity mindar-image-target="targetIndex: 0">
-      <a-entity rotation="-90 0 0">
-        <!--
-          fit-model:
-            - width: 0.8 makes the cake footprint 80% of the card width
-            - Use fit-model="height: 0.6" instead to size it by height
-
-          video-planes:
-            - flame1 -> #vid1
-            - flame2 -> #vid2
-        -->
+      <a-entity card-layout>
         <a-entity
           id="model"
           gltf-model="#birthdayModel"
-          fit-model="width: 1.8"
+          fit-model
           video-planes="flame1: #vid1; flame2: #vid2"
           animation-mixer>
         </a-entity>
@@ -123,11 +113,55 @@
   </a-scene>
 
   <script>
-    const status = document.getElementById('status');
-    const lines = [];
+    // ---------------------------------------------------------------
+    // Settings you can change
+    // ---------------------------------------------------------------
+    // 'upright' = card standing up (screen, wall, held in hand)
+    // 'flat'    = card lying flat on a table
+    const DEFAULT_LAYOUT = 'upright';
 
-    // Keeps only the last 8 messages so the box does not fill the screen.
+    // Cake width as a fraction of the card width. 1 = same width as the card.
+    const DEFAULT_SIZE = 1;
+
+    // How far ahead flame2 runs compared with flame1.
+    // Seconds = frames / fps. Example: 12 frames at 24 fps = 0.5 seconds. Use 0 for none.
+    const FLAME2_OFFSET_SECONDS = 0.5;
+
+    // ---------------------------------------------------------------
+    // Quick testing without editing the file (add to the page address):
+    //   ?view=flat        card lying flat on a table
+    //   ?view=upright     card standing up
+    //   ?size=1.5         cake 1.5 times the card width
+    //   ?debug            shows a small box with what loaded (for finding problems)
+    // Combine with &, for example:  ...?view=flat&size=1.2
+    // ---------------------------------------------------------------
+    const params = new URLSearchParams(window.location.search);
+
+    const CONFIG = {
+      layout:
+        params.get('view') === 'flat' ? 'flat' :
+        params.get('view') === 'upright' ? 'upright' :
+        DEFAULT_LAYOUT,
+      size: parseFloat(params.get('size')) || DEFAULT_SIZE
+    };
+
+    // The on-screen message box only exists in debug mode, so the normal screen stays clean.
+    const DEBUG = params.has('debug');
+    const lines = [];
+    let status = null;
+
+    if (DEBUG) {
+      status = document.createElement('div');
+      status.id = 'status';
+      document.body.appendChild(status);
+    }
+
+    // Keeps only the last 8 messages. Everything is also written to the browser console.
     const log = (msg) => {
+      console.log(msg);
+
+      if (!status) return;
+
       lines.push(msg);
 
       if (lines.length > 8) {
@@ -135,19 +169,25 @@
       }
 
       status.textContent = lines.join('\n');
-      console.log(msg);
     };
 
-    log('Page loaded. Waiting for assets...');
+    log('Layout: ' + CONFIG.layout + ', size: ' + CONFIG.size);
 
-    // Scales a loaded glTF model to a target width or height and places its
-    // base on y = 0, centered on x/z.
+    // Stands the cake on the card according to the chosen layout.
+    AFRAME.registerComponent('card-layout', {
+      init() {
+        this.el.setAttribute('rotation', {
+          x: CONFIG.layout === 'flat' ? 90 : 0,
+          y: 0,
+          z: 0
+        });
+      }
+    });
+
+    // Scales a loaded glTF model so its footprint is CONFIG.size card-widths wide, and centres
+    // it on the card. In the 'flat' layout its base sits on the card; in 'upright' it is
+    // centred on the card.
     AFRAME.registerComponent('fit-model', {
-      schema: {
-        height: { default: 0 },
-        width: { default: 0 }
-      },
-
       init() {
         this.el.addEventListener('model-loaded', () => {
           const root = this.el.object3D;
@@ -198,18 +238,12 @@
             return;
           }
 
-          let scale = 1;
-
-          if (this.data.width > 0) {
-            scale = this.data.width / (Math.max(size.x, size.z) || 1);
-          } else if (this.data.height > 0) {
-            scale = this.data.height / (size.y || 1);
-          }
+          const scale = CONFIG.size / (Math.max(size.x, size.z) || 1);
 
           root.scale.setScalar(scale);
           root.position.set(
             -center.x * scale,
-            -box.min.y * scale,
+            (CONFIG.layout === 'flat' ? -box.min.y : -center.y) * scale,
             -center.z * scale
           );
 
@@ -341,11 +375,6 @@
     // ---------------------------------------------------------------
     // Time difference between the two flames
     // ---------------------------------------------------------------
-    // How far ahead flame2 runs compared with flame1.
-    // Seconds = frames / fps.
-    // Example: 12 frames at 24 fps = 0.5 seconds.
-    const FLAME2_OFFSET_SECONDS = 0.5;
-
     const video1 = document.getElementById('vid1');
     const video2 = document.getElementById('vid2');
 
@@ -372,11 +401,7 @@
       started = true;
       syncAndPlay();
 
-      log(
-        'flame2 starts ' +
-          FLAME2_OFFSET_SECONDS +
-          's ahead of flame1'
-      );
+      log('flame2 starts ' + FLAME2_OFFSET_SECONDS + 's ahead of flame1');
     }
 
     [
