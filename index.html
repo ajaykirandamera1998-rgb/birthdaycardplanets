@@ -37,7 +37,7 @@
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <a-assets timeout="30000">
+    <a-assets timeout="120000">
       <a-asset-item id="birthdayModel" src="BD.glb"></a-asset-item>
 
       <!-- Each video has its own id -->
@@ -90,20 +90,31 @@
         this.el.addEventListener('model-loaded', () => {
           const root = this.el.object3D;
           const obj = this.el.getObject3D('mesh');
-          root.updateWorldMatrix(true, true);
-
-          const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-          const m = new THREE.Matrix4();
+          // Matrix of each mesh relative to the model entity, built from the model's own local
+          // transforms only. World matrices gave NaN here, because MindAR keeps the card anchor
+          // hidden until the card is found.
+          const relative = (o) => {
+            const mat = new THREE.Matrix4();
+            for (let cur = o; cur && cur !== root; cur = cur.parent) {
+              cur.updateMatrix();
+              mat.premultiply(cur.matrix);
+            }
+            return mat;
+          };
           const box = new THREE.Box3();
           obj.traverse((o) => {
             if (!o.isMesh || !o.geometry) return;
             if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-            m.multiplyMatrices(inv, o.matrixWorld);
-            box.union(o.geometry.boundingBox.clone().applyMatrix4(m));
+            box.union(o.geometry.boundingBox.clone().applyMatrix4(relative(o)));
           });
 
           const size = box.getSize(new THREE.Vector3());
           const c = box.getCenter(new THREE.Vector3());
+
+          if (box.isEmpty() || !isFinite(size.x + size.y + size.z)) {
+            log('Could not measure the model, so it keeps its original size and position.');
+            return;
+          }
 
           let s = 1;
           if (this.data.width > 0) s = this.data.width / (Math.max(size.x, size.z) || 1);
